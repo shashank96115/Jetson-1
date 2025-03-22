@@ -1,0 +1,13 @@
+#!/bin/bash
+echo Logging into Amazon ECR...
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 474668407017.dkr.ecr.us-east-1.amazonaws.com
+
+echo Pulling latest Docker image...
+docker pull 474668407017.dkr.ecr.us-east-1.amazonaws.com/jetson-container-1:latest
+
+echo Stopping and removing old container...
+docker stop jetson-container || true
+docker rm jetson-container || true
+
+echo Running new container...
+docker run -d --net=host --runtime=nvidia --gpus all -e DISPLAY=$DISPLAY -v /tmp/.X11-unix/:/tmp/.X11-unix --name jetson-container 474668407017.dkr.ecr.us-east-1.amazonaws.com/jetson-container-1:latest
