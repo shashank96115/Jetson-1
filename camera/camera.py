@@ -1,8 +1,10 @@
 import cv2
-import zmq
+# import zmq
 import numpy as np
 import paho.mqtt.client as mqtt
 import time
+import pickle
+import math
 
 # context = zmq.Context()
 # socket = context.socket(zmq.PUB)
@@ -10,13 +12,13 @@ import time
 
 BROKER = "localhost"
 TOPIC = "camera/frame"
-OBJECT_TOPIC = "object_detection/frame"
-LANE_TOPIC = "lane_detection/frame"
+OBJECT_DETECTION_TOPIC = "object_detection/frame"
+LANE_DETECTED_IMAGE_TOPIC = "lane_detection/frame"
 
-object_frame = None
-lane_frame = None
+object_detections = []
+lane_detected_image = None
 
-client = mqtt.Client()
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.connect(BROKER, 1883, 60)
 
 # Subscribers for processed images
@@ -38,7 +40,7 @@ def initialize_camera(mode):
     elif mode == 3:  # ESP32 camera
         cap = cv2.VideoCapture("http://192.168.233.68:81/stream")
     elif mode == 4:  # ESP32 camera
-        cap = cv2.VideoCapture('obj_lan.mp4')
+        cap = cv2.VideoCapture('lane2.mp4')
     return cap
 
 # camera_sources = {
@@ -58,30 +60,47 @@ cap = initialize_camera(current_camera)
 # # SOME/IP Setup
 # client = someip.("CameraService")
 
+# def on_object_message(client, userdata, message):
+#     global object_frame
+#     frame_data = np.frombuffer(message.payload, dtype=np.uint8)
+#     object_frame = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
+
 def on_object_message(client, userdata, message):
-    global object_frame
-    frame_data = np.frombuffer(message.payload, dtype=np.uint8)
-    object_frame = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
+    global object_detections
+    object_detections = pickle.loads(message.payload)
 
 def on_lane_message(client, userdata, message):
-    global lane_frame
+    global lane_detected_image
     frame_data = np.frombuffer(message.payload, dtype=np.uint8)
-    lane_frame = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
+    lane_detected_image = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
 
-client = mqtt.Client()
-client.message_callback_add(OBJECT_TOPIC, on_object_message)
-client.message_callback_add(LANE_TOPIC, on_lane_message)
+# client = mqtt.Client()
+client.message_callback_add(OBJECT_DETECTION_TOPIC, on_object_message)
+client.message_callback_add(LANE_DETECTED_IMAGE_TOPIC, on_lane_message)
 client.connect(BROKER, 1883, 60)
-client.subscribe([(OBJECT_TOPIC, 0), (LANE_TOPIC, 0)])
+client.subscribe([(OBJECT_DETECTION_TOPIC, 0), (LANE_DETECTED_IMAGE_TOPIC, 0)])
 client.loop_start()
+
+classNames = ["person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat",
+              "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
+              "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
+              "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat",
+              "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+              "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli",
+              "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed",
+              "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone",
+              "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors",
+              "teddy bear", "hair drier", "toothbrush"
+              ]
 
 
 while True:
     ret, frame = cap.read()
     if not ret:
         break
-    
-    # Encode frame
+    # if current_camera == 4 :
+    #     cv2.waitKey(300)
+    # # Encode frame
     _, buffer = cv2.imencode(".jpg", frame)
     client.publish(TOPIC, buffer.tobytes())  # Send frame as bytes
     time.sleep(0.1)  # Adjust based on performance needs
@@ -100,14 +119,31 @@ while True:
     # lane_nparr = np.frombuffer(lane_bytes, np.uint8)
     # lanes_frame = cv2.imdecode(lane_nparr, cv2.IMREAD_GRAYSCALE)
     
-    if object_frame is not None and lane_frame is not None:
-        # combined = cv2.addWeighted(object_frame, 0.5, lane_frame, 0.5, 0)
-        combined = object_frame
-        cv2.imshow("Final Output", combined)
+    # if object_frame is not None and lane_frame is not None:
+    #     combined = cv2.addWeighted(object_frame, 1.0, lane_frame, 1.0, 0)
+    #     #combined = lane_frame
+    #     cv2.imshow("Final Output", combined)
 
     # combined = cv2.addWeighted(objects_frame, 0.7, lanes_frame, 0.3, 0)
 
     # cv2.imshow("Final Output", combined)
+    
+    if lane_detected_image is None:
+        print("Waiting for lane-detected image...")
+        continue  # Wait until lane image is available
+
+    final_image = lane_detected_image.copy()
+
+    for (x1, y1, x2, y2, conf, class_name) in object_detections:
+            cv2.rectangle(final_image, (x1, y1), (x2, y2), (255, 0, 255), 3)
+
+            # Display text
+            cv2.putText(final_image, f"{class_name} {conf:.2f}", (x1, y1-10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 0, 0), 2)
+            # cv2.rectangle(final_image, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Green boxes
+
+        # Display final output
+    cv2.imshow("Final Output", final_image)
 
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
