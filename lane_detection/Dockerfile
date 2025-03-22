@@ -7,5 +7,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 COPY lane_detection.py .
+COPY lane2.mp4
 RUN pip install opencv-python numpy pyzmq pandas paho-mqtt
 CMD ["python3", "lane_detection.py"]
