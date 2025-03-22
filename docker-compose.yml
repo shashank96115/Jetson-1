@@ -1,0 +1,60 @@
+
+services:
+  mqtt_broker:
+    image: eclipse-mosquitto
+    container_name: mqtt_broker
+    ports:
+      - "1883:1883"
+  camera:
+    build: ./camera
+    container_name: camera
+    # networks:
+    #   - my_network
+    network_mode: "host"
+    environment:
+      - DISPLAY=$DISPLAY  # Enables GUI display
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Share X11 socket for display
+    ports:
+      - "5555:5555"  # Expose camera service if needed
+    depends_on:
+       - mqtt_broker
+      #  - object_detection
+      # - lane_detection
+
+  object_detection:
+    build: ./object_detection
+    container_name: object_detection
+    network_mode: "host"
+    # networks:
+    #   - my_network
+    environment:
+      - DISPLAY=$DISPLAY  # Enables GUI display if needed
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix  # Share X11 socket for display
+      - ~/.config/Ultralytics:/root/.config/Ultralytics  # Persist YOLO settings
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+     - mqtt_broker
+    #   - camera
+
+  lane_detection:
+    build: ./lane_detection
+    container_name: lane_detection
+    network_mode: "host"
+    # networks:
+    #   - my_network
+    depends_on:
+      - mqtt_broker
+    #   - camera
+
+# networks:
+#   my_network:
+#     driver: bridge
