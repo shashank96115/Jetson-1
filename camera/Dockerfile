@@ -7,7 +7,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /app
 COPY camera.py .
-COPY british_highway_traffic.mp4 .
-COPY test_video.mp4 .
+COPY lane2.mp4 .
 RUN pip install opencv-python numpy pyzmq paho-mqtt
 CMD ["python3", "camera.py"]
