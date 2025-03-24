@@ -1,0 +1,54 @@
+name: Jetson Nano CI/CD with ECR
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 474668407017.dkr.ecr.us-east-1.amazonaws.com
+  IMAGE_TAG: latest
+
+jobs:
+  build-push-ecr:
+    runs-on: self-hosted
+    environment: production
+    env:
+      DEVICE_ID: ${{ secrets.DEVICE_ID }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      run: |
+        aws ecr get-login-password --region $AWS_REGION | \
+        docker login --username AWS --password-stdin $ECR_REGISTRY
+
+    - name: Build and tag images
+      run: |
+        docker-compose build
+        docker tag object-detection $ECR_REGISTRY/object-detection:$IMAGE_TAG
+        docker tag camera-service $ECR_REGISTRY/camera-service:$IMAGE_TAG
+
+    - name: Push images to ECR
+      run: |
+        docker push $ECR_REGISTRY/object-detection:$IMAGE_TAG
+        docker push $ECR_REGISTRY/camera-service:$IMAGE_TAG
+
+  deploy:
+    runs-on: self-hosted
+    needs: build-push-ecr
+    steps:
+    - name: Pull and deploy
+      run: |
+        docker-compose -f docker-compose.prod.yml pull
+        docker-compose -f docker-compose.prod.yml up -d
