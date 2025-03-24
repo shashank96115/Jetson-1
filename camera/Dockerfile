@@ -8,5 +8,5 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /app
 COPY camera.py .
 COPY lane2.mp4 .
-RUN pip install opencv-python numpy pyzmq paho-mqtt
+RUN pip install opencv-python numpy pyzmq
 CMD ["python3", "camera.py"]
