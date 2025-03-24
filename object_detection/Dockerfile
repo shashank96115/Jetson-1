@@ -9,5 +9,5 @@ WORKDIR /app
 
 COPY object_detection.py .
 COPY yolo11n.pt .
-RUN pip install opencv-python numpy pyzmq ultralytics matplotlib paho-mqtt
+RUN pip install opencv-python numpy pyzmq ultralytics
 CMD ["python3", "object_detection.py"]
